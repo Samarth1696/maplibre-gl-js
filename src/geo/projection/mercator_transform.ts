@@ -539,8 +539,6 @@ export class MercatorTransform implements ITransform {
         this._helper._cameraLngLat = mercatorCoordinateToLocation(cameraMerc);
         this._helper._cameraAltitude = altitudeFromMercatorZ(cameraMerc.z, centerMerc.y);
 
-        const centerXWorld = centerMerc.x * this.worldSize;
-        const centerYWorld = centerMerc.y * this.worldSize;
         const cameraXWorld = cameraMerc.x * this.worldSize;
         const cameraYWorld = cameraMerc.y * this.worldSize;
         const cameraZWorld = cameraMerc.z * this.worldSize;
@@ -635,12 +633,18 @@ export class MercatorTransform implements ITransform {
         // is an odd integer to preserve rendering to the pixel grid. We're rotating this shift based on the angle
         // of the transformation so that 0°, 90°, 180°, and 270° rasters are crisp, and adjust the shift so that
         // it is always <= 0.5 pixels.
-        const xShift = (this._helper._width % 2) / 2, yShift = (this._helper._height % 2) / 2,
-            angleCos = Math.cos(this._helper._angle), angleSin = Math.sin(this._helper._angle),
-            dx = centerXWorld - Math.round(centerXWorld) + angleCos * xShift + angleSin * yShift,
-            dy = centerYWorld - Math.round(centerYWorld) + angleCos * yShift + angleSin * xShift;
         const alignedM = new Float64Array(m) as any as mat4;
-        mat4.translate(alignedM, alignedM, [dx > 0.5 ? dx - 1 : dx, dy > 0.5 ? dy - 1 : dy, 0]);
+        if (this.center)
+        {
+            const centerMerc = MercatorCoordinate.fromLngLat(this.center, this.elevation);
+            const centerXWorld = centerMerc.x * this.worldSize;
+            const centerYWorld = centerMerc.y * this.worldSize;
+            const xShift = (this._helper._width % 2) / 2, yShift = (this._helper._height % 2) / 2,
+                angleCos = Math.cos(this._helper._angle), angleSin = Math.sin(this._helper._angle),
+                dx = centerXWorld - Math.round(centerXWorld) + angleCos * xShift + angleSin * yShift,
+                dy = centerYWorld - Math.round(centerYWorld) + angleCos * yShift + angleSin * xShift;
+            mat4.translate(alignedM, alignedM, [dx > 0.5 ? dx - 1 : dx, dy > 0.5 ? dy - 1 : dy, 0]);  
+        }
         this._alignedProjMatrix = alignedM;
 
         // inverse matrix for conversion from screen coordinates to location
