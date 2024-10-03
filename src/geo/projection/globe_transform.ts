@@ -826,6 +826,10 @@ export class GlobeTransform implements ITransform {
         };
     }
 
+    calculateCenterFromLLA(ll: LngLat, alt: number, bearing?: number, pitch?: number, roll?: number): {center: LngLat, elevation: number, zoom: number} {
+        return this._mercatorTransform.calculateCenterFromLLA(ll, alt, bearing, pitch, roll);
+    }
+
     /**
      * Note: automatically adjusts zoom to keep planet size consistent
      * (same size before and after a {@link setLocationAtPoint} call).

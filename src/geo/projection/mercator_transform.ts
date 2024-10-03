@@ -515,27 +515,23 @@ export class MercatorTransform implements ITransform {
         return result;
     }
 
-    setCamLLA(ll: LngLat, alt: number, bearing?: number, pitch?: number, roll?: number) {
-        if (bearing !== undefined) {
-            this.setBearing(bearing);
-        }
-        if (pitch !== undefined) {
-            this.setPitch(pitch);
-        }
-        if (roll !== undefined) {
-            this.setRoll(roll);
-        }
-        const camMerc = MercatorCoordinate.fromLngLat(ll, alt);
-        const dzNormalized = -Math.cos(this._helper._pitch);
-        const dhNormalized = Math.sin(this._helper._pitch);
-        const dxNormalized = -dhNormalized * Math.sin(this._helper._angle);
-        const dyNormalized = -dhNormalized * Math.cos(this._helper._angle);
+    calculateCenterFromLLA(ll: LngLat, alt: number, bearing?: number, pitch?: number, roll?: number): {center: LngLat, elevation: number, zoom: number} {
+        bearing = bearing !== undefined ? bearing : this.bearing;
+        pitch = pitch !== undefined ? pitch : this.pitch;
+        roll = roll !== undefined ? roll : this.roll;
 
-        const altitudeAGL = alt - this.elevation;
+        const camMerc = MercatorCoordinate.fromLngLat(ll, alt);
+        const dzNormalized = -Math.cos(degreesToRadians(pitch));
+        const dhNormalized = Math.sin(degreesToRadians(pitch));
+        const dxNormalized = dhNormalized * Math.sin(degreesToRadians(bearing));
+        const dyNormalized = -dhNormalized * Math.cos(degreesToRadians(bearing));
+
+        let elevation = this.elevation;
+        const altitudeAGL = alt - elevation;
         let distanceToCenterMeters;
         if (dzNormalized * altitudeAGL > 1.0e-9) {
             distanceToCenterMeters = 10000;
-            this.setElevation(alt + distanceToCenterMeters * dzNormalized);
+            elevation = alt + distanceToCenterMeters * dzNormalized;
         } else {
             distanceToCenterMeters = -altitudeAGL / dzNormalized;
         }
@@ -557,9 +553,9 @@ export class MercatorTransform implements ITransform {
             metersPerMercUnit = 1 / centerMerc.meterInMercatorCoordinateUnits();
         } while(Math.abs(distanceToCenterMeters - dMerc * metersPerMercUnit) > 0.001)
 
-        this.setCenter(centerMerc.toLngLat());
-        const zoom = scaleZoom(this.height / 2 / Math.tan(this._helper._fov) / dMerc / this.tileSize);
-        this.setZoom(zoom);
+        const center = centerMerc.toLngLat();
+        const zoom = scaleZoom(this.height / 2 / Math.tan(this._helper._fov / 2) / dMerc / this.tileSize);
+        return {center, elevation, zoom};
     }
 
     _calcMatrices(): void {
