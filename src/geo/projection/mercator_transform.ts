@@ -515,6 +515,53 @@ export class MercatorTransform implements ITransform {
         return result;
     }
 
+    setCamLLA(ll: LngLat, alt: number, bearing?: number, pitch?: number, roll?: number) {
+        if (bearing !== undefined) {
+            this.setBearing(bearing);
+        }
+        if (pitch !== undefined) {
+            this.setPitch(pitch);
+        }
+        if (roll !== undefined) {
+            this.setRoll(roll);
+        }
+        const camMerc = MercatorCoordinate.fromLngLat(ll, alt);
+        const dzNormalized = -Math.cos(this._helper._pitch);
+        const dhNormalized = Math.sin(this._helper._pitch);
+        const dxNormalized = -dhNormalized * Math.sin(this._helper._angle);
+        const dyNormalized = -dhNormalized * Math.cos(this._helper._angle);
+
+        const altitudeAGL = alt - this.elevation;
+        let distanceToCenterMeters;
+        if (dzNormalized * altitudeAGL > 1.0e-9) {
+            distanceToCenterMeters = 10000;
+            this.setElevation(alt + distanceToCenterMeters * dzNormalized);
+        } else {
+            distanceToCenterMeters = -altitudeAGL / dzNormalized;
+        }
+
+        let metersPerMercUnit = altitudeFromMercatorZ(1, camMerc.y);
+        let centerMerc: MercatorCoordinate;
+        let dMerc: number;
+        let iter = 0;
+        const max_iter = 10;
+        do {
+            iter += 1;
+            if (iter > max_iter) {
+                break;
+            }
+            dMerc = distanceToCenterMeters / metersPerMercUnit;
+            const dx = dxNormalized * dMerc;
+            const dy = dyNormalized * dMerc;
+            centerMerc = new MercatorCoordinate(camMerc.x + dx, camMerc.y + dy);
+            metersPerMercUnit = 1 / centerMerc.meterInMercatorCoordinateUnits();
+        } while(Math.abs(distanceToCenterMeters - dMerc * metersPerMercUnit) > 0.001)
+
+        this.setCenter(centerMerc.toLngLat());
+        const zoom = scaleZoom(this.height / 2 / Math.tan(this._helper._fov) / dMerc / this.tileSize);
+        this.setZoom(zoom);
+    }
+
     _calcMatrices(): void {
         if (!this._helper._height) return;
 
