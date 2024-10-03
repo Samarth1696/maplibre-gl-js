@@ -1,7 +1,7 @@
 import {earthRadius, LngLat, LngLatLike} from '../lng_lat';
 import {altitudeFromMercatorZ, MercatorCoordinate, mercatorXfromLng, mercatorYfromLat, mercatorZfromAltitude} from '../mercator_coordinate';
 import Point from '@mapbox/point-geometry';
-import {wrap, clamp, createIdentityMat4f64, createMat4f64} from '../../util/util';
+import {wrap, clamp, createIdentityMat4f64, createMat4f64, degreesToRadians} from '../../util/util';
 import {mat2, mat4, vec3, vec4} from 'gl-matrix';
 import {UnwrappedTileID, OverscaledTileID, CanonicalTileID, calculateTileKey} from '../../source/tile_id';
 import {Terrain} from '../../render/terrain';
@@ -170,12 +170,6 @@ export class MercatorTransform implements ITransform {
     }
     get elevation(): number {
         return this._helper.elevation;
-    }
-    get cameraLngLat(): LngLat {
-        return this._helper.cameraLngLat;
-    }
-    get cameraAltitude(): number {
-        return this._helper.cameraAltitude;
     }
     get minElevationForCurrentTile(): number {
         return this._helper.minElevationForCurrentTile;
@@ -528,23 +522,17 @@ export class MercatorTransform implements ITransform {
         const offset = this.centerOffset;
         this._cameraToCenterDistance = 0.5 / Math.tan(halfFov) * this._helper._height;
         this._helper._pixelPerMeter = mercatorZfromAltitude(1, this.center.lat) * this.worldSize;
-
+        const cameraToCenterDistanceMeters = this._cameraToCenterDistance / this._helper._pixelPerMeter;
         const centerMerc = MercatorCoordinate.fromLngLat(this.center, this.elevation);
-        const d = this._cameraToCenterDistance / this.worldSize;
-        const dz = d * Math.cos(this._helper._pitch);
-        const dh = Math.sqrt(d*d - dz*dz);
-        const dxMerc = dh * Math.sin(this._helper._angle);
-        const dyMerc = dh * Math.cos(this._helper._angle);
-        const cameraMerc = new MercatorCoordinate(centerMerc.x + dxMerc, centerMerc.y + dyMerc, centerMerc.z + dz);
-        this._helper._cameraLngLat = mercatorCoordinateToLocation(cameraMerc);
-        this._helper._cameraAltitude = altitudeFromMercatorZ(cameraMerc.z, centerMerc.y);
+        const cameraMerc = camMercFromCenterAndRotation(this.center, this.elevation, this.pitch, this.bearing, cameraToCenterDistanceMeters);
 
         const cameraXWorld = cameraMerc.x * this.worldSize;
         const cameraYWorld = cameraMerc.y * this.worldSize;
         const cameraZWorld = cameraMerc.z * this.worldSize;
 
         const minElevation = Math.min(this.elevation, this.minElevationForCurrentTile);
-        const maxAltitudeAGL = this.cameraAltitude - minElevation;
+        const cameraAltitude = altitudeFromMercatorZ(cameraMerc.z, centerMerc.y);
+        const maxAltitudeAGL = cameraAltitude - minElevation;
 
         const zfov = this._helper._fov * (Math.abs(Math.cos(this._helper._roll)) * this._helper._height + Math.abs(Math.sin(this._helper._roll)) * this._helper._width) / this._helper._height;
         const maxPitchAngle = this._helper._pitch + zfov / 2;
@@ -636,7 +624,6 @@ export class MercatorTransform implements ITransform {
         const alignedM = new Float64Array(m) as any as mat4;
         if (this.center)
         {
-            const centerMerc = MercatorCoordinate.fromLngLat(this.center, this.elevation);
             const centerXWorld = centerMerc.x * this.worldSize;
             const centerYWorld = centerMerc.y * this.worldSize;
             const xShift = (this._helper._width % 2) / 2, yShift = (this._helper._height % 2) / 2,
@@ -787,4 +774,15 @@ export class MercatorTransform implements ITransform {
         projectionData.mainMatrix = projectionMatrixScaled;
         return projectionData;
     }
+}
+
+function camMercFromCenterAndRotation(center: LngLat, elevation: number, pitch: number, bearing: number, distance: number): MercatorCoordinate {
+    const centerMerc = MercatorCoordinate.fromLngLat(center, elevation);
+    const mercUnitsPerMeter = mercatorZfromAltitude(1, center.lat);
+    const dMerc = distance * mercUnitsPerMeter;
+    const dzMerc = dMerc * Math.cos(degreesToRadians(pitch));
+    const dhMerc = Math.sqrt(dMerc * dMerc - dzMerc * dzMerc);
+    const dxMerc = dhMerc * Math.sin(degreesToRadians(-bearing));
+    const dyMerc = dhMerc * Math.cos(degreesToRadians(-bearing));
+    return new MercatorCoordinate(centerMerc.x + dxMerc, centerMerc.y + dyMerc, centerMerc.z + dzMerc);
 }
