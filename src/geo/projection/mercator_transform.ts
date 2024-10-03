@@ -526,8 +526,6 @@ export class MercatorTransform implements ITransform {
 
         const halfFov = this._helper._fov / 2;
         const offset = this.centerOffset;
-        const point = projectToWorldCoordinates(this.worldSize, this.center);
-        const x = point.x, y = point.y;
         this._cameraToCenterDistance = 0.5 / Math.tan(halfFov) * this._helper._height;
         this._helper._pixelPerMeter = mercatorZfromAltitude(1, this.center.lat) * this.worldSize;
 
@@ -540,6 +538,12 @@ export class MercatorTransform implements ITransform {
         const cameraMerc = new MercatorCoordinate(centerMerc.x + dxMerc, centerMerc.y + dyMerc, centerMerc.z + dz);
         this._helper._cameraLngLat = mercatorCoordinateToLocation(cameraMerc);
         this._helper._cameraAltitude = altitudeFromMercatorZ(cameraMerc.z, centerMerc.y);
+
+        const centerXWorld = centerMerc.x * this.worldSize;
+        const centerYWorld = centerMerc.y * this.worldSize;
+        const cameraXWorld = cameraMerc.x * this.worldSize;
+        const cameraYWorld = cameraMerc.y * this.worldSize;
+        const cameraZWorld = cameraMerc.z * this.worldSize;
 
         const minElevation = Math.min(this.elevation, this.minElevationForCurrentTile);
         const maxAltitudeAGL = this.cameraAltitude - minElevation;
@@ -580,11 +584,10 @@ export class MercatorTransform implements ITransform {
         this._projectionMatrix = mat4.clone(m);
 
         mat4.scale(m, m, [1, -1, 1]);
-        mat4.translate(m, m, [0, 0, -this._cameraToCenterDistance]);
         mat4.rotateZ(m, m, -this._helper._roll);
         mat4.rotateX(m, m, this._helper._pitch);
         mat4.rotateZ(m, m, this._helper._angle);
-        mat4.translate(m, m, [-x, -y, 0]);
+        mat4.translate(m, m, [-cameraXWorld, -cameraYWorld, -cameraZWorld]);
 
         // The mercatorMatrix can be used to transform points from mercator coordinates
         // ([0, 0] nw, [1, 1] se) to clip space.
@@ -616,11 +619,10 @@ export class MercatorTransform implements ITransform {
         this._fogMatrix[8] = -offset.x * 2 / this.width;
         this._fogMatrix[9] = offset.y * 2 / this.height;
         mat4.scale(this._fogMatrix, this._fogMatrix, [1, -1, 1]);
-        mat4.translate(this._fogMatrix, this._fogMatrix, [0, 0, -this.cameraToCenterDistance]);
         mat4.rotateZ(this._fogMatrix, this._fogMatrix, -this._helper._roll);
         mat4.rotateX(this._fogMatrix, this._fogMatrix, this._helper._pitch);
         mat4.rotateZ(this._fogMatrix, this._fogMatrix, this.angle);
-        mat4.translate(this._fogMatrix, this._fogMatrix, [-x, -y, 0]);
+        mat4.translate(this._fogMatrix, this._fogMatrix, [-cameraXWorld, -cameraYWorld, -cameraZWorld]);
         mat4.scale(this._fogMatrix, this._fogMatrix, [1, 1, this._helper._pixelPerMeter]);
         mat4.translate(this._fogMatrix, this._fogMatrix, [0, 0, -this.elevation]); // elevate camera over terrain
 
@@ -635,8 +637,8 @@ export class MercatorTransform implements ITransform {
         // it is always <= 0.5 pixels.
         const xShift = (this._helper._width % 2) / 2, yShift = (this._helper._height % 2) / 2,
             angleCos = Math.cos(this._helper._angle), angleSin = Math.sin(this._helper._angle),
-            dx = x - Math.round(x) + angleCos * xShift + angleSin * yShift,
-            dy = y - Math.round(y) + angleCos * yShift + angleSin * xShift;
+            dx = centerXWorld - Math.round(centerXWorld) + angleCos * xShift + angleSin * yShift,
+            dy = centerYWorld - Math.round(centerYWorld) + angleCos * yShift + angleSin * xShift;
         const alignedM = new Float64Array(m) as any as mat4;
         mat4.translate(alignedM, alignedM, [dx > 0.5 ? dx - 1 : dx, dy > 0.5 ? dy - 1 : dy, 0]);
         this._alignedProjMatrix = alignedM;
