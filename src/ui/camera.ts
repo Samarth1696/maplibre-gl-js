@@ -919,7 +919,7 @@ export abstract class Camera extends Evented {
         const pitch = camOptions.pitch !== undefined ? camOptions.pitch : this.getPitch();
         const roll = camOptions.roll !== undefined ? camOptions.roll : this.getRoll();
 
-        const centerInfo = this.transform.calculateCenterFromLLA(camOptions.camLngLat, camOptions.camAlt, bearing, pitch, roll);
+        const centerInfo = this.transform.calculateCenterFromLLA(camOptions.camLngLat, camOptions.camAlt, bearing, pitch);
 
         return {
             center: centerInfo.center,
