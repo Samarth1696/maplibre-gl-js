@@ -115,6 +115,8 @@ export class TransformHelper implements ITransformGetters {
     _maxPitch: number;
     _center: LngLat;
     _elevation: number;
+    _cameraLngLat: LngLat;
+    _cameraAltitude: number;
     _minElevationForCurrentTile: number;
     _pixelPerMeter: number;
     _edgeInsets: EdgeInsets;
@@ -347,6 +349,29 @@ export class TransformHelper implements ITransformGetters {
     setElevation(elevation: number) {
         if (elevation === this._elevation) return;
         this._elevation = elevation;
+        this._constrain();
+        this._calcMatrices();
+    }
+
+    /**
+     * Camera longitude and latitude
+     */
+    get cameraLngLat(): LngLat { return this._cameraLngLat; }
+    setCameraLngLat(cameraLngLat: LngLat) {
+        if (cameraLngLat.lat === this._cameraLngLat.lat && cameraLngLat.lng === this._cameraLngLat.lng) return;
+        this._unmodified = false;
+        this._cameraLngLat = cameraLngLat;
+        this._constrain();
+        this._calcMatrices();
+    }
+
+    /**
+     * Camera altitude, meters above sea level
+     */
+    get cameraAltitude(): number { return this._cameraAltitude; }
+    setCameraAltitude(cameraAltitude: number) {
+        if (cameraAltitude === this._cameraAltitude) return;
+        this._cameraAltitude = cameraAltitude;
         this._constrain();
         this._calcMatrices();
     }
