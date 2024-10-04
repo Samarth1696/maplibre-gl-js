@@ -696,6 +696,14 @@ export class MercatorTransform implements ITransform {
         return altitude + this.elevation;
     }
 
+    getCameraLngLat(): LngLat {
+        const cameraToCenterDistance = 0.5 / Math.tan(this._helper._fov / 2) * this._helper._height;
+        const pixelPerMeter = mercatorZfromAltitude(1, this.center.lat) * this.worldSize;
+        const cameraToCenterDistanceMeters = cameraToCenterDistance / pixelPerMeter;
+        const camMerc = camMercFromCenterAndRotation(this.center, this.elevation, this.pitch, this.bearing, cameraToCenterDistanceMeters)
+        return camMerc.toLngLat();
+    }
+
     lngLatToCameraDepth(lngLat: LngLat, elevation: number) {
         const coord = locationToMercatorCoordinate(lngLat);
         const p = [coord.x * this.worldSize, coord.y * this.worldSize, elevation, 1] as vec4;
