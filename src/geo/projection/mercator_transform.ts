@@ -268,8 +268,8 @@ export class MercatorTransform implements ITransform {
 
     recalculateZoom(terrain?: Terrain): void {
         // find position the camera is looking on
-        let center = this.screenPointToLocation(this.centerPoint, terrain);
-        let elevation = terrain ? terrain.getElevationForLngLatZoom(center, this._helper._tileZoom) : 0;
+        const center = this.screenPointToLocation(this.centerPoint, terrain);
+        const elevation = terrain ? terrain.getElevationForLngLatZoom(center, this._helper._tileZoom) : 0;
         const deltaElevation = this.elevation - elevation;
         if (!deltaElevation) return;
 
@@ -700,7 +700,7 @@ export class MercatorTransform implements ITransform {
         const cameraToCenterDistance = 0.5 / Math.tan(this._helper._fov / 2) * this._helper._height;
         const pixelPerMeter = mercatorZfromAltitude(1, this.center.lat) * this.worldSize;
         const cameraToCenterDistanceMeters = cameraToCenterDistance / pixelPerMeter;
-        const camMerc = camMercFromCenterAndRotation(this.center, this.elevation, this.pitch, this.bearing, cameraToCenterDistanceMeters)
+        const camMerc = camMercFromCenterAndRotation(this.center, this.elevation, this.pitch, this.bearing, cameraToCenterDistanceMeters);
         return camMerc.toLngLat();
     }
 
