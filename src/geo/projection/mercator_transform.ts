@@ -266,34 +266,27 @@ export class MercatorTransform implements ITransform {
         return mercatorCoveringTiles(this, options, this._invViewProjMatrix);
     }
 
-    recalculateZoom(terrain: Terrain): void {
-        const origElevation = this.elevation;
-        const origAltitude = Math.cos(this._helper._pitch) * this._cameraToCenterDistance / this._helper._pixelPerMeter;
-
+    recalculateZoom(terrain?: Terrain): void {
         // find position the camera is looking on
-        const center = this.screenPointToLocation(this.centerPoint, terrain);
-        const elevation = terrain.getElevationForLngLatZoom(center, this._helper._tileZoom);
+        let center = this.screenPointToLocation(this.centerPoint, terrain);
+        let elevation = terrain ? terrain.getElevationForLngLatZoom(center, this._helper._tileZoom) : 0;
         const deltaElevation = this.elevation - elevation;
         if (!deltaElevation) return;
 
-        // The camera's altitude off the ground + the ground's elevation = a constant:
-        // this means the camera stays at the same total height.
-        const requiredAltitude = origAltitude + origElevation - elevation;
-        // Since altitude = Math.cos(this._pitch) * this.cameraToCenterDistance / pixelPerMeter:
-        const requiredPixelPerMeter = Math.cos(this._helper._pitch) * this._cameraToCenterDistance / requiredAltitude;
-        if (requiredPixelPerMeter <= 0) {
-            return;
-        }
-        // Since pixelPerMeter = mercatorZfromAltitude(1, center.lat) * worldSize:
-        const requiredWorldSize = requiredPixelPerMeter / mercatorZfromAltitude(1, center.lat);
-        // Since worldSize = this.tileSize * scale:
-        const requiredScale = requiredWorldSize / this.tileSize;
-        const zoom = scaleZoom(requiredScale);
+        // Find the current camera position
+        const origPixelPerMeter = mercatorZfromAltitude(1, this.center.lat) * this.worldSize;
+        const cameraToCenterDistanceMeters = this._cameraToCenterDistance / origPixelPerMeter;
+        const origCenterMerc = MercatorCoordinate.fromLngLat(this.center, this.elevation);
+        const cameraMerc = camMercFromCenterAndRotation(this.center, this.elevation, this.pitch, this.bearing, cameraToCenterDistanceMeters);
+
+        // update elevation to the new terrain intercept elevation and recalculate the center point
+        this._helper._elevation = elevation;
+        const centerInfo = this.calculateCenterFromLLA(cameraMerc.toLngLat(), altitudeFromMercatorZ(cameraMerc.z, origCenterMerc.y), this.bearing, this.pitch);
 
         // update matrices
-        this._helper._elevation = elevation;
-        this._helper._center = center;
-        this.setZoom(zoom);
+        this._helper._elevation = centerInfo.elevation;
+        this._helper._center = centerInfo.center;
+        this.setZoom(centerInfo.zoom);
     }
 
     setLocationAtPoint(lnglat: LngLat, point: Point) {
@@ -531,7 +524,7 @@ export class MercatorTransform implements ITransform {
         let elevation = this.elevation;
         const altitudeAGL = alt - elevation;
         let distanceToCenterMeters;
-        if (dzNormalized * altitudeAGL > -1.0e-9) {
+        if (dzNormalized * altitudeAGL >= 0.0 || Math.abs(dzNormalized) < 0.1) {
             distanceToCenterMeters = 10000;
             elevation = alt + distanceToCenterMeters * dzNormalized;
         } else {

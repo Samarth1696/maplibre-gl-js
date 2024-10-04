@@ -700,7 +700,7 @@ export class GlobeTransform implements ITransform {
         return globeCoveringTiles(this._cachedFrustum, this._cachedClippingPlane, cameraCoord, centerCoord, coveringZ, options);
     }
 
-    recalculateZoom(terrain: Terrain): void {
+    recalculateZoom(terrain?: Terrain): void {
         this._mercatorTransform.recalculateZoom(terrain);
         this.apply(this._mercatorTransform);
     }
