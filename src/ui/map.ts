@@ -361,7 +361,7 @@ const defaultMinPitch = 0;
 const defaultMaxPitch = 60;
 
 // use this variable to check maxPitch for validity
-const maxPitchThreshold = 85;
+const maxPitchThreshold = 180;
 
 const defaultOptions: Readonly<Partial<MapOptions>> = {
     hash: false,
