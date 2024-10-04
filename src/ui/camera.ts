@@ -1181,11 +1181,11 @@ export abstract class Camera extends Evented {
                 elevation
             } = modifier(nextTransform);
             if (center) nextTransform.setCenter(center);
+            if (elevation !== undefined) nextTransform.setElevation(elevation);
             if (zoom !== undefined) nextTransform.setZoom(zoom);
             if (roll !== undefined) nextTransform.setRoll(roll);
             if (pitch !== undefined) nextTransform.setPitch(pitch);
             if (bearing !== undefined) nextTransform.setBearing(bearing);
-            if (elevation !== undefined) nextTransform.setElevation(elevation);
             finalTransform.apply(nextTransform);
         }
         this.transform.apply(finalTransform);
