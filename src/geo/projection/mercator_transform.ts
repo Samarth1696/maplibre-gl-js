@@ -281,6 +281,9 @@ export class MercatorTransform implements ITransform {
         const requiredAltitude = origAltitude + origElevation - elevation;
         // Since altitude = Math.cos(this._pitch) * this.cameraToCenterDistance / pixelPerMeter:
         const requiredPixelPerMeter = Math.cos(this._helper._pitch) * this._cameraToCenterDistance / requiredAltitude;
+        if (requiredPixelPerMeter <= 0) {
+            return;
+        }
         // Since pixelPerMeter = mercatorZfromAltitude(1, center.lat) * worldSize:
         const requiredWorldSize = requiredPixelPerMeter / mercatorZfromAltitude(1, center.lat);
         // Since worldSize = this.tileSize * scale:
@@ -528,7 +531,7 @@ export class MercatorTransform implements ITransform {
         let elevation = this.elevation;
         const altitudeAGL = alt - elevation;
         let distanceToCenterMeters;
-        if (dzNormalized * altitudeAGL > 1.0e-9) {
+        if (dzNormalized * altitudeAGL > -1.0e-9) {
             distanceToCenterMeters = 10000;
             elevation = alt + distanceToCenterMeters * dzNormalized;
         } else {
