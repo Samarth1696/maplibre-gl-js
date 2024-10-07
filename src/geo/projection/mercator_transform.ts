@@ -546,7 +546,7 @@ export class MercatorTransform implements ITransform {
             const dy = dyNormalized * dMerc;
             centerMerc = new MercatorCoordinate(camMerc.x + dx, camMerc.y + dy);
             metersPerMercUnit = 1 / centerMerc.meterInMercatorCoordinateUnits();
-        } while (Math.abs(distanceToCenterMeters - dMerc * metersPerMercUnit) > 0.001);
+        } while (Math.abs(distanceToCenterMeters - dMerc * metersPerMercUnit) > 1.0e-12);
 
         const center = centerMerc.toLngLat();
         const zoom = scaleZoom(this.height / 2 / Math.tan(this._helper._fov / 2) / dMerc / this.tileSize);
