@@ -565,14 +565,13 @@ export class MercatorTransform implements ITransform {
         const cameraMerc = camMercFromCenterAndRotation(this.center, this.elevation, this.pitch, this.bearing, cameraToCenterDistanceMeters);
         const centerXWorld = centerMerc.x * this.worldSize;
         const centerYWorld = centerMerc.y * this.worldSize;
-        const minElevation = Math.min(this.elevation, this.minElevationForCurrentTile);
+        const minElevation = Math.min(this.elevation, this.minElevationForCurrentTile, 0);
         const cameraAltitude = altitudeFromMercatorZ(cameraMerc.z, centerMerc.y);
         const maxAltitudeAGL = cameraAltitude - minElevation;
         const zfov = this._helper._fov * (Math.abs(Math.cos(this._helper._roll)) * this._helper._height + Math.abs(Math.sin(this._helper._roll)) * this._helper._width) / this._helper._height;
         const maxPitchAngle = this._helper._pitch + zfov / 2;
         // At low altitude, use the true horizon angle. At higher altitudes, use a fixed horizon angle
         const horizonPitchAngle = Math.max(1.52, Math.asin(earthRadius / (maxAltitudeAGL + earthRadius)));
-        const cameraToSeaLevelDistancePixels = this.worldSize * cameraMerc.z / Math.cos(Math.min(horizonPitchAngle, this._helper._pitch));
 
         // The larger the value of nearZ is
         // - the more depth precision is available for features (good)
@@ -635,6 +634,7 @@ export class MercatorTransform implements ITransform {
 
         // create a fog matrix, same es proj-matrix but with near clipping-plane in mapcenter
         // needed to calculate a correct z-value for fog calculation, because projMatrix z value is not
+        const cameraToSeaLevelDistancePixels = Math.min(this._farZ - 1, this.worldSize * cameraMerc.z / Math.cos(Math.min(degreesToRadians(85), this._helper._pitch)));
         this._fogMatrix = new Float64Array(16) as any;
         mat4.perspective(this._fogMatrix, this._helper._fov, this.width / this.height, cameraToSeaLevelDistancePixels, this._farZ);
         this._fogMatrix[8] = -offset.x * 2 / this.width;
