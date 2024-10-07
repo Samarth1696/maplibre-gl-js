@@ -266,7 +266,8 @@ describe('transform', () => {
                 new OverscaledTileID(5, 0, 5, 21, 7),
                 new OverscaledTileID(5, 0, 5, 20, 7),
                 new OverscaledTileID(5, 0, 5, 24, 9),
-                new OverscaledTileID(5, 0, 5, 22, 7)
+                new OverscaledTileID(5, 0, 5, 22, 7),
+                new OverscaledTileID(5, 0, 5, 20, 6)
             ]);
 
             transform.setZoom(8);
@@ -285,7 +286,8 @@ describe('transform', () => {
                 new OverscaledTileID(8, 0, 8, 145, 74),
                 new OverscaledTileID(8, 0, 8, 145, 73),
                 new OverscaledTileID(8, 0, 8, 146, 74),
-                new OverscaledTileID(8, 0, 8, 146, 73)
+                new OverscaledTileID(8, 0, 8, 146, 73),
+                new OverscaledTileID(8, 0, 8, 146, 72)
             ]);
 
             transform.setZoom(2);
