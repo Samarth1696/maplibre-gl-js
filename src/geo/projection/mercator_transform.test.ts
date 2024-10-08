@@ -537,4 +537,24 @@ describe('transform', () => {
         expect(projection.signedDistanceFromCamera).toBeCloseTo(787.6699126802941, precisionDigits);
         expect(projection.isOccluded).toBe(false);
     });
+
+    test('getCameraLngLat', () => {
+        const transform = new MercatorTransform(0, 22, 0, 60, true);
+        transform.setElevation(200);
+        transform.setCenter(new LngLat(15.0, 55.0));
+        transform.setZoom(14);
+        transform.setPitch(55);
+        transform.setBearing(75);
+        transform.resize(512, 512);
+
+        expect(transform.getCameraAltitude()).toBeCloseTo(1405.7075926414002, 10);
+        expect(transform.getCameraLngLat().lng).toBeCloseTo(14.973921529405033, 10);
+        expect(transform.getCameraLngLat().lat).toBeCloseTo(54.99599181678275, 10);
+
+        transform.setRoll(31);
+
+        expect(transform.getCameraAltitude()).toBeCloseTo(1405.7075926414002, 10);
+        expect(transform.getCameraLngLat().lng).toBeCloseTo(14.973921529405033, 10);
+        expect(transform.getCameraLngLat().lat).toBeCloseTo(54.99599181678275, 10);
+    });
 });
