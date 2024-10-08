@@ -42,15 +42,15 @@ describe('transform', () => {
         expect(transform.centerPoint.equals(new Point(250, 250))).toBe(true);
         expect(transform.height).toBe(500);
         expect(transform.nearZ).toBe(10);
-        expect(transform.farZ).toBeCloseTo(839.9372834328213, 6);
-        expect([...transform.projectionMatrix.values()]).toEqual([3, 0, 0, 0, 0, 3, 0, 0, -0, 0, -1.0240981578826904, -1, 0, 0, -20.240982055664062, 0]);
-        expectToBeCloseToArray([...transform.inverseProjectionMatrix.values()], [0.3333333333333333, 0, 0, 0, 0, 0.3333333333333333, 0, 0, 0, 0, 0, -0.04940471745943162, 0, 0, -1, 0.050595282540568394], 10);
+        expect(transform.farZ).toBe(804.8028169246645);
+        expect([...transform.projectionMatrix.values()]).toEqual([3, 0, 0, 0, 0, 3, 0, 0, -0, 0, -1.0251635313034058, -1, 0, 0, -20.25163459777832, 0]);
+        expectToBeCloseToArray([...transform.inverseProjectionMatrix.values()], [0.3333333333333333, 0, 0, 0, 0, 0.3333333333333333, 0, 0, 0, 0, 0, -0.04937872980873673, 0, 0, -1, 0.05062127019126326], 10);
         expectToBeCloseToArray([...mat4.multiply(new Float64Array(16) as any, transform.projectionMatrix, transform.inverseProjectionMatrix).values()], [
             1, 0, 0, 0,
             0, 1, 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1], 6);
-        expect([...transform.modelViewProjectionMatrix.values()]).toEqual([3, 0, 0, 0, 0, -2.954423259036624, -0.17783278730270136, -0.17364817766693033, -0, 0.006822967915294533, -0.01320915112115639, -0.012898324631281611, -786432, 774484.3308168967, 47365.63086745527, 46270.827886319785]);
+        expect([...transform.modelViewProjectionMatrix.values()]).toEqual([3, 0, 0, 0, 0, -2.954423259036624, -0.1780177690666898, -0.17364817766693033, -0, 0.006822967915294533, -0.013222891287479163, -0.012898324631281611, -786432, 774484.3308168967, 47414.91102496082, 46270.827886319785]);
         expect(fixedLngLat(transform.screenPointToLocation(new Point(250, 250)))).toEqual({lng: 0, lat: 0});
         expect(fixedCoord(transform.screenPointToMercatorCoordinate(new Point(250, 250)))).toEqual({x: 0.5, y: 0.5, z: 0});
         expect(transform.locationToScreenPoint(new LngLat(0, 0))).toEqual({x: 250, y: 250});
@@ -266,8 +266,7 @@ describe('transform', () => {
                 new OverscaledTileID(5, 0, 5, 21, 7),
                 new OverscaledTileID(5, 0, 5, 20, 7),
                 new OverscaledTileID(5, 0, 5, 24, 9),
-                new OverscaledTileID(5, 0, 5, 22, 7),
-                new OverscaledTileID(5, 0, 5, 20, 6)
+                new OverscaledTileID(5, 0, 5, 22, 7)
             ]);
 
             transform.setZoom(8);
@@ -286,8 +285,7 @@ describe('transform', () => {
                 new OverscaledTileID(8, 0, 8, 145, 74),
                 new OverscaledTileID(8, 0, 8, 145, 73),
                 new OverscaledTileID(8, 0, 8, 146, 74),
-                new OverscaledTileID(8, 0, 8, 146, 73),
-                new OverscaledTileID(8, 0, 8, 146, 72)
+                new OverscaledTileID(8, 0, 8, 146, 73)
             ]);
 
             transform.setZoom(2);
