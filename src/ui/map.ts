@@ -213,6 +213,11 @@ export type MapOptions = {
      */
     center?: LngLatLike;
     /**
+     * The elevation of the initial geographical centerpoint of the map, in meters above sea level. If `elevation` is not specified in the constructor options, MapLibre GL JS will look for it in the map's style object. If it is not specified in the style, either, it will default to `0`.
+     * @defaultValue 0
+     */
+    elevation?: number;
+    /**
      * The initial zoom level of the map. If `zoom` is not specified in the constructor options, MapLibre GL JS will look for it in the map's style object. If it is not specified in the style, either, it will default to `0`.
      * @defaultValue 0
      */
@@ -391,6 +396,7 @@ const defaultOptions: Readonly<Partial<MapOptions>> = {
     trackResize: true,
 
     center: [0, 0],
+    elevation: 0,
     zoom: 0,
     bearing: 0,
     pitch: 0,
@@ -685,6 +691,7 @@ export class Map extends Camera {
         if (!this._hash || !this._hash._onHashChange()) {
             this.jumpTo({
                 center: resolvedOptions.center,
+                elevation: resolvedOptions.elevation,
                 zoom: resolvedOptions.zoom,
                 bearing: resolvedOptions.bearing,
                 pitch: resolvedOptions.pitch

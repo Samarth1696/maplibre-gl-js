@@ -1,7 +1,7 @@
 import {mat4} from 'gl-matrix';
 import {EXTENT} from '../../data/extent';
 import {OverscaledTileID} from '../../source/tile_id';
-import {clamp} from '../../util/util';
+import {clamp, degreesToRadians} from '../../util/util';
 import {MAX_VALID_LATITUDE, UnwrappedTileIDType, zoomScale} from '../transform_helper';
 import {LngLat} from '../lng_lat';
 import {MercatorCoordinate, mercatorXfromLng, mercatorYfromLat} from '../mercator_coordinate';
@@ -82,8 +82,10 @@ export function unprojectFromWorldCoordinates(worldSize: number, point: Point): 
  * @returns Horizon above center in pixels.
  */
 export function getMercatorHorizon(transform: {pitch: number; cameraToCenterDistance: number}): number {
-    const scaleFactor = transform.pitch < 90 ? 0.85 : 1.0; 
-    return Math.tan(Math.PI / 2 - transform.pitch * Math.PI / 180.0) * transform.cameraToCenterDistance * scaleFactor;
+    if (transform.pitch > 85) {
+        return Math.tan(degreesToRadians(89 - transform.pitch)) * transform.cameraToCenterDistance;
+    }
+    return Math.tan(Math.PI / 2 - transform.pitch * Math.PI / 180.0) * transform.cameraToCenterDistance * 0.85;
 }
 
 export function getBasicProjectionData(overscaledTileID: OverscaledTileID, tilePosMatrix?: mat4, ignoreTerrainMatrix?: boolean): ProjectionData {
