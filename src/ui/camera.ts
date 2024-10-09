@@ -1,21 +1,25 @@
-import {extend, wrap, defaultEasing, pick} from '../util/util';
-import {interpolates} from '@maplibre/maplibre-gl-style-spec';
-import {browser} from '../util/browser';
-import {LngLat} from '../geo/lng_lat';
-import {LngLatBounds} from '../geo/lng_lat_bounds';
+import { extend, wrap, defaultEasing, pick } from '../util/util';
+import { interpolates } from '@maplibre/maplibre-gl-style-spec';
+import { browser } from '../util/browser';
+import { LngLat, earthRadius } from '../geo/lng_lat';
+import { LngLatBounds } from '../geo/lng_lat_bounds';
 import Point from '@mapbox/point-geometry';
-import {Event, Evented} from '../util/evented';
-import {Terrain} from '../render/terrain';
-import {MercatorCoordinate} from '../geo/mercator_coordinate';
+import { Event, Evented } from '../util/evented';
+import { Terrain } from '../render/terrain';
+import { MercatorCoordinate } from '../geo/mercator_coordinate';
 
-import type {ITransform} from '../geo/transform_interface';
-import type {LngLatLike} from '../geo/lng_lat';
-import type {LngLatBoundsLike} from '../geo/lng_lat_bounds';
-import type {TaskID} from '../util/task_queue';
-import type {PaddingOptions} from '../geo/edge_insets';
-import type {HandlerManager} from './handler_manager';
-import {scaleZoom} from '../geo/transform_helper';
-import {ICameraHelper} from '../geo/projection/camera_helper';
+import type { ITransform } from '../geo/transform_interface';
+import type { LngLatLike } from '../geo/lng_lat';
+import type { LngLatBoundsLike } from '../geo/lng_lat_bounds';
+import type { TaskID } from '../util/task_queue';
+import type { PaddingOptions } from '../geo/edge_insets';
+import type { HandlerManager } from './handler_manager';
+import { scaleZoom } from '../geo/transform_helper';
+import { ICameraHelper } from '../geo/projection/camera_helper';
+import { Uniform1f } from '../render/uniform_binding';
+
+const FIXED_TIME_STEP = 1 / 60; // Simulation updates at 60 Hz
+const MAX_ACCUMULATED_TIME = FIXED_TIME_STEP * 5; // Cap to prevent spiral of death
 
 /**
  * A [Point](https://github.com/mapbox/point-geometry) or an array of two numbers representing `x` and `y` screen coordinates in pixels.
@@ -246,7 +250,7 @@ export type AnimationOptions = {
 /**
  * A callback hook that allows manipulating the camera and being notified about camera updates before they happen
  */
-export type CameraUpdateTransformFunction =  (next: {
+export type CameraUpdateTransformFunction = (next: {
     center: LngLat;
     zoom: number;
     roll: number;
@@ -286,6 +290,21 @@ export abstract class Camera extends Evented {
     _onEaseFrame: (_: number) => void;
     _onEaseEnd: (easeId?: string) => void;
     _easeFrameId: TaskID;
+
+    // Motion state variables
+    _motionStarts: boolean = false;
+    _throttle: number = 0;
+    _aileron: number = 0;
+    _elevator: number = 0;
+    _rudder: number = 0;
+    _maxSpeed: number = 2000;
+    _totalSpeed: number;
+
+    _accumulatedTime: number;
+
+    _lastUpdateTime: number = 0;
+    _motionFrameId?: number;
+    _abortController: AbortController | null = null;
 
     /**
      * @internal
@@ -378,7 +397,7 @@ export abstract class Camera extends Evented {
      * ```
      */
     setCenter(center: LngLatLike, eventData?: any) {
-        return this.jumpTo({center}, eventData);
+        return this.jumpTo({ center }, eventData);
     }
 
     /**
@@ -393,7 +412,7 @@ export abstract class Camera extends Evented {
      */
     panBy(offset: PointLike, options?: AnimationOptions, eventData?: any): this {
         offset = Point.convert(offset).mult(-1);
-        return this.panTo(this.transform.center, extend({offset}, options), eventData);
+        return this.panTo(this.transform.center, extend({ offset }, options), eventData);
     }
 
     /**
@@ -443,7 +462,7 @@ export abstract class Camera extends Evented {
      * ```
      */
     setZoom(zoom: number, eventData?: any): this {
-        this.jumpTo({zoom}, eventData);
+        this.jumpTo({ zoom }, eventData);
         return this;
     }
 
@@ -534,7 +553,7 @@ export abstract class Camera extends Evented {
      * ```
      */
     setBearing(bearing: number, eventData?: any): this {
-        this.jumpTo({bearing}, eventData);
+        this.jumpTo({ bearing }, eventData);
         return this;
     }
 
@@ -561,7 +580,7 @@ export abstract class Camera extends Evented {
      * ```
      */
     setPadding(padding: PaddingOptions, eventData?: any): this {
-        this.jumpTo({padding}, eventData);
+        this.jumpTo({ padding }, eventData);
         return this;
     }
 
@@ -590,7 +609,7 @@ export abstract class Camera extends Evented {
      * @param eventData - Additional properties to be added to event objects of events triggered by this method.
      */
     resetNorth(options?: AnimationOptions, eventData?: any): this {
-        this.rotateTo(0, extend({duration: 1000}, options), eventData);
+        this.rotateTo(0, extend({ duration: 1000 }, options), eventData);
         return this;
     }
 
@@ -644,7 +663,7 @@ export abstract class Camera extends Evented {
      * @param eventData - Additional properties to be added to event objects of events triggered by this method.
      */
     setPitch(pitch: number, eventData?: any): this {
-        this.jumpTo({pitch}, eventData);
+        this.jumpTo({ pitch }, eventData);
         return this;
     }
 
@@ -664,7 +683,7 @@ export abstract class Camera extends Evented {
      * @param eventData - Additional properties to be added to event objects of events triggered by this method.
      */
     setRoll(roll: number, eventData?: any): this {
-        this.jumpTo({roll}, eventData);
+        this.jumpTo({ roll }, eventData);
         return this;
     }
 
@@ -1136,7 +1155,7 @@ export abstract class Camera extends Evented {
      *
      * @param tr - The transform to check.
      */
-    _elevateCameraIfInsideTerrain(tr: ITransform) : { pitch?: number; zoom?: number } {
+    _elevateCameraIfInsideTerrain(tr: ITransform): { pitch?: number; zoom?: number } {
         const cameraLngLat = tr.screenPointToLocation(tr.getCameraPoint());
         const cameraAltitude = tr.getCameraAltitude();
         const minAltitude = this.terrain.getElevationForLngLatZoom(cameraLngLat, tr.zoom);
@@ -1159,7 +1178,7 @@ export abstract class Camera extends Evented {
      * Call `transformCameraUpdate` if present, and then apply the "approved" changes.
      */
     _applyUpdatedTransform(tr: ITransform) {
-        const modifiers : ((tr: ITransform) => ReturnType<CameraUpdateTransformFunction>)[] = [];
+        const modifiers: ((tr: ITransform) => ReturnType<CameraUpdateTransformFunction>)[] = [];
         if (this.terrain) {
             modifiers.push(tr => this._elevateCameraIfInsideTerrain(tr));
         }
@@ -1366,13 +1385,13 @@ export abstract class Camera extends Evented {
 
         // w(s): Returns the visible span on the ground, measured in pixels with respect to the
         // initial scale. Assumes an angular field of view of 2 arctan ½ ≈ 53°.
-        let w: (_: number) => number = function (s) {
+        let w: (_: number) => number = function(s) {
             return (cosh(r0) / cosh(r0 + rho * s));
         };
 
         // u(s): Returns the distance along the flight path as projected onto the ground plane,
         // measured in pixels from the world image origin at the initial scale.
-        let u: (_: number) => number = function (s) {
+        let u: (_: number) => number = function(s) {
             return w0 * ((cosh(r0) * tanh(r0 + rho * s) - sinh(r0)) / rho2) / u1;
         };
 
@@ -1533,5 +1552,234 @@ export abstract class Camera extends Evented {
         }
         const elevation = this.terrain.getElevationForLngLatZoom(LngLat.convert(lngLatLike), this.transform.tileZoom);
         return elevation - this.transform.elevation;
+    }
+
+    /**
+     * Updates the camera position based on the current speed and acceleration.
+     *
+     * @param deltaTime - Time elapsed since the last update in seconds.
+     */
+    _updateCameraPosition(deltaTime: number) {
+
+        // Clamp control inputs
+        this._throttle = Math.min(Math.max(this._throttle, -1), 1);
+        this._aileron = Math.min(Math.max(this._aileron, -1), 1);
+        this._elevator = Math.min(Math.max(this._elevator, -1), 1);
+        this._rudder = Math.min(Math.max(this._rudder, -1), 1);
+
+        const throttle = this._throttle;
+        console.log(throttle);
+
+        // Calculate velocity based on throttle (assuming throttle ranges from -1 to 1)
+        this._totalSpeed = throttle * this._maxSpeed; // m/s
+        console.log("Speed: ", this._totalSpeed);
+
+        // // Stop motion if all speeds are zero
+        // if (this._totalSpeed == 0) {
+        //     this._stopMotion();
+        //     return;
+        // }
+
+        // Calculate pitch, roll, and yaw based on control inputs
+        const currentPitch = this.getPitch() * (Math.PI / 180);
+        let pitchRate = Math.PI / 4;
+        const targetPitch = -this._elevator * Math.PI / 2;
+
+        // if (currentPitch > targetPitch) { // pitching down
+        //     console.log("Pitching down");
+        //     pitchRate *= -1;
+        // }
+
+        let pitch = currentPitch + (pitchRate * deltaTime);
+
+        if (pitchRate > 0) {
+            if (pitch > targetPitch) { // pitching up
+                pitch = targetPitch;
+            }
+        } else if (pitchRate < 0) { //pitching down
+            if (pitch < targetPitch) {
+                pitch = targetPitch;
+            }
+        }
+
+        const currentRoll = this.getRoll() * (Math.PI / 180);
+        let rollRate = Math.PI / 4;
+        const targetRoll = this._aileron * (Math.PI / 2);
+
+        if (currentRoll > targetRoll) { // rolling left
+            rollRate *= -1;
+        }
+
+        let roll = currentRoll + (rollRate * deltaTime);
+
+        if (rollRate > 0) {
+            if (roll > targetRoll) { // rolling right
+                roll = targetRoll;
+            }
+        } else if (rollRate < 0) { // rolling left
+            if (roll < targetRoll) {
+                roll = targetRoll;
+            }
+        }
+
+        let elevationRate = Math.sin(pitch) * this._totalSpeed;
+        let elevation = elevationRate * deltaTime;
+
+        // lateral speed
+        let lateralSpeed = Math.cos(pitch) * this._totalSpeed; // m/s
+        let lateralDistance = lateralSpeed * deltaTime; // meters
+
+        // angle of turn
+        let turnRate = Math.sin(roll) * (Math.PI / 4);
+        let turn = turnRate * deltaTime;
+
+        // Update heading (bearing)
+        let heading = this.getBearing() * (Math.PI / 180);
+        heading = (heading + turn + this._rudder * deltaTime) % (2 * Math.PI);
+
+        const oldposition = this.getCenter();
+        const oldLat = oldposition.lat * (Math.PI / 180);
+        const oldLng = oldposition.lng * (Math.PI / 180);
+
+        // Destination point given distance and bearing from start point
+        const LatRad = Math.asin(Math.sin(oldLat) * Math.cos(lateralDistance / earthRadius) +
+            Math.cos(oldLat) * Math.sin(lateralDistance / earthRadius) * Math.cos(heading));
+        const LngRad = oldLng + Math.atan2(Math.sin(heading) * Math.sin(lateralDistance / earthRadius) * Math.cos(oldLat),
+            Math.cos(lateralDistance / earthRadius) - Math.sin(oldLat) * Math.sin(LatRad));
+
+        const newLat = LatRad * (180 / Math.PI);
+        const newLng = LngRad * (180 / Math.PI);
+
+        // Update elevation
+        const newElevation = this.transform.elevation;
+
+        // Update camera position
+        this.jumpToLLA({
+            camLngLat: new LngLat(newLng, newLat),
+            camAlt: newElevation,
+            bearing: heading * (180 / Math.PI),
+            pitch: pitch * (180 / Math.PI),
+            roll: roll * (180 / Math.PI)
+        });
+    }
+
+    /**
+     * Starts the motion animation loop if not already started.
+     */
+    _startMotion() {
+        if (this._motionFrameId) return; // Already running
+
+        this._abortController = new AbortController();
+        this._lastUpdateTime = browser.now();
+        this._accumulatedTime = 0;
+
+        const animate = () => {
+            if (this._abortController?.signal.aborted) {
+                this._motionFrameId = undefined;
+                return;
+            }
+
+            const currentTime = browser.now();
+            let deltaTime = (currentTime - this._lastUpdateTime) / 1000; // Convert to seconds
+            this._lastUpdateTime = currentTime;
+
+            // Cap deltaTime to avoid spiral of death
+            deltaTime = Math.min(deltaTime, MAX_ACCUMULATED_TIME);
+
+            this._accumulatedTime += deltaTime;
+
+            // Simulate in fixed time steps
+            while (this._accumulatedTime >= FIXED_TIME_STEP) {
+                // Update simulation
+                this._updateCameraPosition(FIXED_TIME_STEP);
+
+                this._accumulatedTime -= FIXED_TIME_STEP;
+            }
+
+            console.log("calling");
+            // Schedule the next frame
+            this._motionFrameId = requestAnimationFrame(animate);
+        };
+
+        // Start the animation loop
+        this._motionFrameId = requestAnimationFrame(animate);
+    }
+
+    /**
+     * Stops the motion animation loop.
+     */
+    _stopMotion() {
+        if (this._abortController) {
+            this._abortController.abort();
+            this._abortController = null;
+        }
+        if (this._motionFrameId !== undefined) {
+            cancelAnimationFrame(this._motionFrameId);
+            this._motionFrameId = undefined;
+        }
+    }
+
+    increaseThrottle() {
+        this._throttle += 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    decreaseThrottle() {
+        this._throttle -= 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    increaseAileron() {
+        this._aileron += 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    decreaseAileron() {
+        this._aileron -= 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    increaseElevator() {
+        this._elevator += 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    decreaseElevator() {
+        this._elevator -= 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    increaseRudder() {
+        this._rudder += 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
+    }
+
+    decreaseRudder() {
+        this._rudder -= 0.1;
+        if (!this._motionStarts) {
+            this._motionStarts = true;
+            this._startMotion();
+        }
     }
 }
