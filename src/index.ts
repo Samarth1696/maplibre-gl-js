@@ -7,6 +7,7 @@ import {LogoControl} from './ui/control/logo_control';
 import {ScaleControl} from './ui/control/scale_control';
 import {FullscreenControl} from './ui/control/fullscreen_control';
 import {TerrainControl} from './ui/control/terrain_control';
+import {AircraftMotionControl} from './ui/control/motion_control';
 import {Popup} from './ui/popup';
 import {Marker} from './ui/marker';
 import {Style} from './style/style';
@@ -180,6 +181,7 @@ export {
     ScaleControl,
     FullscreenControl,
     TerrainControl,
+    AircraftMotionControl,
     Hash,
     Popup,
     Marker,
