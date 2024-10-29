@@ -1,9 +1,8 @@
-import {LngLat} from '../../geo/lng_lat';
-import {browser} from '../../util/browser';
-import {earthRadius} from '../../geo/lng_lat';
-import {TaskID} from '../../util/task_queue';
-import type {Map} from '../map';
-import type {IControl} from './control';
+import { LngLat } from '../../geo/lng_lat';
+import { browser } from '../../util/browser';
+import { earthRadius } from '../../geo/lng_lat';
+import type { Map } from '../map';
+import type { IControl } from './control';
 
 interface MotionState {
     position: {
@@ -150,8 +149,10 @@ export class AircraftMotionControl implements IControl {
         const deltaTime = this._currentState ?
             (now - this._currentState.lastUpdateTime) / 1000 : 0;
 
+        // Store previous state
         this._previousState = this._currentState;
 
+        // Update current state
         this._currentState = {
             position: {
                 lat: state.lat,
@@ -171,6 +172,7 @@ export class AircraftMotionControl implements IControl {
             lastUpdateTime: now
         };
 
+        // Calculate motion derivatives if we have previous state
         if (this._previousState && deltaTime > 0) {
             this._updateMotionDerivatives(deltaTime);
         }
@@ -179,28 +181,70 @@ export class AircraftMotionControl implements IControl {
     _updateCameraFromState(): void {
         if (!this._currentState || !this._map) return;
 
-        const cameraPosition = this._calculateCameraPosition();
+        const now = browser.now();
+        const deltaTime = (now - this._currentState.lastUpdateTime) / 1000;
+
+        // Predict current position based on last known velocity
+        const predictedState = this._predictCurrentState(deltaTime);
+
+        const cameraPosition = this._calculateCameraPosition(predictedState);
         if (!cameraPosition) return;
 
         const { camPos, camAlt, heading, pitch, roll } = cameraPosition;
 
         // Update the map camera
-        this._map.jumpToLLA({
-            camLngLat: new LngLat(camPos.lng, camPos.lat),
-            camAlt: camAlt,
-            bearing: heading,
-            pitch: pitch,
-            roll: roll,
-        });
+        const jumpToOptions = this._map.calculateCameraOptionsFromCameraLngLatAltRotation(camPos, camAlt, heading, pitch, roll);
+        this._map.jumpTo(jumpToOptions);
+    }
+
+    _predictCurrentState(deltaTime: number): MotionState {
+        const state = this._currentState;
+
+        const metersPerDegree = 111111;
+
+        // Use smoothed velocities to predict new position
+        // Calculate position changes
+        const latChange = Number(((this._velocitySmoothed.y * deltaTime) / metersPerDegree).toFixed(6));
+        const lngChange = Number(((this._velocitySmoothed.x * deltaTime) /
+            (metersPerDegree * Math.cos(Number((state.position.lat * Math.PI / 180).toFixed(6))))
+        ).toFixed(6));
+        const altChange = Number((this._velocitySmoothed.z * deltaTime).toFixed(6));
+
+        // Calculate attitude changes
+        const headingChange = Number((this._angularVelocitySmoothed.heading * deltaTime).toFixed(6));
+        const pitchChange = Number((this._angularVelocitySmoothed.pitch * deltaTime).toFixed(6));
+        const rollChange = Number((this._angularVelocitySmoothed.roll * deltaTime).toFixed(6));
+        console.log(headingChange, pitchChange, rollChange);
+
+        // Create predicted state
+        const predictedState: MotionState = {
+            position: {
+                lat: Number((state.position.lat + latChange).toFixed(6)),
+                lng: Number((state.position.lng + lngChange).toFixed(6)),
+                altitude: Number((state.position.altitude + altChange).toFixed(6))
+            },
+            attitude: {
+                heading: Number(((state.attitude.heading + headingChange + 360) % 360).toFixed(6)),
+                pitch: Number((state.attitude.pitch + pitchChange).toFixed(6)),
+                roll: Number((state.attitude.roll + rollChange).toFixed(6))
+            },
+            velocity: {
+                groundSpeed: Number(state.velocity.groundSpeed.toFixed(6)),
+                verticalSpeed: Number(state.velocity.verticalSpeed.toFixed(6)),
+                groundTrack: Number(state.velocity.groundTrack.toFixed(6))
+            },
+            lastUpdateTime: state.lastUpdateTime
+        };
+
+        return predictedState;
     }
 
     /**
      * Calculate relative camera position based on current mode and aircraft state
      */
-    _calculateCameraPosition(): { camPos: LngLat; camAlt: number; heading: number; pitch: number; roll: number } | null {
+    _calculateCameraPosition(state: MotionState = this._currentState): { camPos: LngLat; camAlt: number; heading: number; pitch: number; roll: number } | null {
         if (!this._currentState) return null;
 
-        const state = this._currentState;
         const mode = this._cameraMode;
         let camPos: LngLat;
         let camAlt: number;
@@ -281,8 +325,10 @@ export class AircraftMotionControl implements IControl {
      * Calculate offset position based on bearing and distance
      */
     _offsetPosition(lat: number, lng: number, bearing: number, offsetX: number, offsetY: number): LngLat {
-        const bearingRad = (bearing - 90) * Math.PI / 180; // Convert to radians and adjust for coord system
-        const R = earthRadius; // Earth's radius in meters
+
+        // Convert to radians and adjust for coord system
+        const bearingRad = (bearing - 90) * Math.PI / 180;
+        const R = earthRadius;
 
         const offsetBearing = Math.atan2(offsetY, offsetX);
         const offsetDistance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
@@ -307,33 +353,54 @@ export class AircraftMotionControl implements IControl {
         );
     }
 
-    /**
-     * Update motion smoothing and derivatives
-     */
     _updateMotionDerivatives(deltaTime: number) {
         if (!this._previousState || !this._currentState) return;
 
         const prev = this._previousState;
         const curr = this._currentState;
 
-        // Calculate velocities
-        const dx = (curr.position.lng - prev.position.lng) * Math.cos(curr.position.lat * Math.PI / 180) * 111319.9;
-        const dy = (curr.position.lat - prev.position.lat) * 111319.9;
-        const dz = curr.position.altitude - prev.position.altitude;
+        const metersPerDegree = 111111;
 
-        // Smooth velocities
-        this._velocitySmoothed.x += (dx / deltaTime - this._velocitySmoothed.x) * this._smoothingFactor;
-        this._velocitySmoothed.y += (dy / deltaTime - this._velocitySmoothed.y) * this._smoothingFactor;
-        this._velocitySmoothed.z += (dz / deltaTime - this._velocitySmoothed.z) * this._smoothingFactor;
+        // Calculate position differences
+        const cosLat = Number((Math.cos(curr.position.lat * Math.PI / 180)).toFixed(6));
+        const dx = Number(((curr.position.lng - prev.position.lng) * cosLat * metersPerDegree).toFixed(6));
+        const dy = Number(((curr.position.lat - prev.position.lat) * metersPerDegree).toFixed(6));
+        const dz = Number((curr.position.altitude - prev.position.altitude).toFixed(6));
+
+        // Calculate instantaneous velocities
+        const vx = Number((dx / deltaTime).toFixed(6));
+        const vy = Number((dy / deltaTime).toFixed(6));
+        const vz = Number((dz / deltaTime).toFixed(6));
+
+        // Calculate angular differences
+        const dHeading = Number((this._shortestAngleDifference(prev.attitude.heading, curr.attitude.heading)).toFixed(6));
+        const dPitch = Number((curr.attitude.pitch - prev.attitude.pitch).toFixed(6));
+        const dRoll = Number((curr.attitude.roll - prev.attitude.roll).toFixed(6));
+
+        // Calculate angular velocities
+        const angularVelocityHeading = Number((dHeading / deltaTime).toFixed(6));
+        const angularVelocityPitch = Number((dPitch / deltaTime).toFixed(6));
+        const angularVelocityRoll = Number((dRoll / deltaTime).toFixed(6));
+
+        // Apply smoothing
+        // You can increase the smoothing factor to add more precision
+        const predictionSmoothingFactor = 0.3;
+
+        // Smooth linear velocities
+        this._velocitySmoothed.x = Number((this._velocitySmoothed.x +
+            (vx - this._velocitySmoothed.x) * predictionSmoothingFactor).toFixed(6));
+        this._velocitySmoothed.y = Number((this._velocitySmoothed.y +
+            (vy - this._velocitySmoothed.y) * predictionSmoothingFactor).toFixed(6));
+        this._velocitySmoothed.z = Number((this._velocitySmoothed.z +
+            (vz - this._velocitySmoothed.z) * predictionSmoothingFactor).toFixed(6));
 
         // Smooth angular velocities
-        const dHeading = this._shortestAngleDifference(prev.attitude.heading, curr.attitude.heading);
-        const dPitch = curr.attitude.pitch - prev.attitude.pitch;
-        const dRoll = curr.attitude.roll - prev.attitude.roll;
-
-        this._angularVelocitySmoothed.heading += (dHeading / deltaTime - this._angularVelocitySmoothed.heading) * this._smoothingFactor;
-        this._angularVelocitySmoothed.pitch += (dPitch / deltaTime - this._angularVelocitySmoothed.pitch) * this._smoothingFactor;
-        this._angularVelocitySmoothed.roll += (dRoll / deltaTime - this._angularVelocitySmoothed.roll) * this._smoothingFactor;
+        this._angularVelocitySmoothed.heading = Number((this._angularVelocitySmoothed.heading +
+            (angularVelocityHeading - this._angularVelocitySmoothed.heading) * predictionSmoothingFactor).toFixed(6));
+        this._angularVelocitySmoothed.pitch = Number((this._angularVelocitySmoothed.pitch +
+            (angularVelocityPitch - this._angularVelocitySmoothed.pitch) * predictionSmoothingFactor).toFixed(6));
+        this._angularVelocitySmoothed.roll = Number((this._angularVelocitySmoothed.roll +
+            (angularVelocityRoll - this._angularVelocitySmoothed.roll) * predictionSmoothingFactor).toFixed(6));
     }
 
     /**
@@ -389,9 +456,9 @@ export class AircraftMotionControl implements IControl {
      * Calculate shortest angle difference
      */
     _shortestAngleDifference(angle1: number, angle2: number): number {
-        let diff = angle2 - angle1;
-        while (diff > 180) diff -= 360;
-        while (diff < -180) diff += 360;
+        let diff = Number((angle2 - angle1).toFixed(6));
+        while (diff > 180) diff = Number((diff - 360).toFixed(6));
+        while (diff < -180) diff = Number((diff + 360).toFixed(6));
         return diff;
     }
 
